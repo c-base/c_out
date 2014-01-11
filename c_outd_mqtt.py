@@ -11,27 +11,7 @@ from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 
 import mosquitto
 
-mqtt_client_id = "c_out_c_leuse"
-mqtt_server = "c-beam.cbrp3.c-base.org"
-jsonrpc_enabled = False
-
-
-#player = 'mpg123'
-player = 'mplayer'
-
-c_outlimit = 10
-suppressiontimeout = 300
-cpamdelta = 90
-
-sampledir = '/tmp'
-sampledir = '/usr/local/sounds/loop'
-sampledir = '/usr/local/sounds/samples'
-tmpdir = '/tmp'
-
-r2d2path = '/home/smile/projects/c-beam/c_out/r2d2_wav'
-txt2phopath = "/var/www/c_out.c-base.org/txt2speech/txt2pho"
-
-acapelapassword = '0g7znor2aa'
+import config
 
 thevoices = ['lucy', 'peter', 'rachel', 'heather', 'kenny', 'laura', 'nelly', 'ryan', 'julia', 'sarah', 'klaus', 'de5', 'r2d2']
 acapelavoices = ['lucy', 'peter', 'rachel', 'heather', 'kenny', 'laura', 'nelly', 'ryan', 'julia', 'sarah', 'klaus']
@@ -43,10 +23,8 @@ coutcount = 0
 suppressuntil = 0
 lastcpamcheck = 0
 
-logfile = '/home/smile/c_out.log'
-
 logger = logging.getLogger('c_out')
-hdlr = logging.FileHandler(logfile)
+hdlr = logging.FileHandler(config.logfile)
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr) 
@@ -56,17 +34,16 @@ enabled = 1
 
 def mqtt_connect(client):
     try: 
-        client.connect(mqtt_server)
+        client.connect(config.mqtt_server)
         client.subscribe("c_out/+", 1)
         client.on_message = on_message
     except: pass
 
 def mqtt_loop():
-    client = mosquitto.Mosquitto(mqtt_client_id)
+    client = mosquitto.Mosquitto(config.mqtt_client_id)
     mqtt_connect(client)
     while True:
         result = client.loop(1)
-        print result
         if result != 0:
             mqtt_connect(client)
         time.sleep(2)
@@ -107,7 +84,7 @@ def start_jsonrpc_server():
 def main():
     mqtt = Thread(target=mqtt_loop)
     mqtt.start()
-    if jsonrpc_enabled:
+    if config.jsonrpc_enabled:
         start_jsonrpc_server()
 
 
@@ -135,16 +112,16 @@ def findFile(dir, filename):
     return ""
 
 def mergemp3(mp3s, outfile):
-    oFile = open('%s/%s.mp3' % (tmpdir, outfile),'wb')
+    oFile = open('%s/%s.mp3' % (config.tmpdir, outfile),'wb')
     oFile.close
 
     for mp3 in mp3s:
-        iFile = open("%s/%s" % (r2d2path, mp3), 'r')
+        iFile = open("%s/%s" % (config.r2d2path, mp3), 'r')
         oFile.write(iFile.read())
         iFile.close
     oFile.close
 
-    return "%s/%s" % (tmpdir, outfile)
+    return "%s/%s" % (config.tmpdir, outfile)
 
 
 def tts(voice, text):
@@ -178,7 +155,7 @@ def acapela(voice, text):
         voice = '%s22k' % voice
     
     basename = '%s_%s_%d_%d' % (urllib.quote(text.lower()), voice, pitch, speed)
-    filename = '%s/%s.mp3' % (tmpdir, hashlib.sha256(basename).hexdigest())
+    filename = '%s/%s.mp3' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
     textparam = '\\vct=%d\\ \\spd=%d\\ %s' % (pitch, speed, text)
 
     # check whether we have a cached version of the the file
@@ -198,7 +175,7 @@ def acapela(voice, text):
             'cl_login': 'ACAPELA_BOX',
             'prot_vers': '2',
             'req_snd_id': '0_0_84%s88' % random.randint(0, 32767),
-            'cl_pwd': acapelapassword
+            'cl_pwd': config.acapelapassword
         })
 
         headers = {"Content-type": "application/x-www-form-urlencoded",
@@ -223,7 +200,7 @@ def acapela(voice, text):
 
 def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
     basename = '%s_%s' % (urllib.quote(text.lower()), lang)
-    filename = '%s/%s.mp3' % (tmpdir, hashlib.sha256(basename).hexdigest())
+    filename = '%s/%s.mp3' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
 
     logger.info('%s - %s' % (text, filename))
     if os.path.isfile(filename):
@@ -242,7 +219,7 @@ def att(voice, text):
     return
     HOST = "192.20.225.55"
     basename = '%s_%s' % (urllib.quote(text.lower()), lang)
-    filename = '%s/%s.mp3' % (tmpdir, hashlib.sha256(basename).hexdigest())
+    filename = '%s/%s.mp3' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
     params = urllib.urlencode({'voice': voice, 'txt':text, 'speakButton': 'SPEAK'})
     headers = {"Content-type": "application/x-www-form-urlencoded",
             "User-Agent": "firefox",
@@ -282,14 +259,14 @@ def r2d2(text):
         char = char.replace(unicode('\xc3\x96', 'utf8'), "OE")
         char = char.replace(unicode('\xc3\x9c', 'utf8'), "UE")
 
-        mp3s.append("%s/%s.mp3" % (r2d2path, char))
+        mp3s.append("%s/%s.mp3" % (config.r2d2path, char))
     logger.info("%s - %s" % (text, "r2d2"))
     return " ".join(mp3s)
 
 def txt2pho(voice, text):
-    filenamemp3 = '%s/%s_%s.mp3' % (tmpdir, urllib.quote(text.lower()), voice)
-    filenamewav = '%s/%s_%s.wav' % (tmpdir, urllib.quote(text.lower()), voice)
-    os.system('echo "%s" | %s/txt2pho | %s/mbrola -v 2.5 %s/data/%s/%s - %s' % (text, txt2phopath, txt2phopath, txt2phopath, voice, voice, filenamewav))
+    filenamemp3 = '%s/%s_%s.mp3' % (config.tmpdir, urllib.quote(text.lower()), voice)
+    filenamewav = '%s/%s_%s.wav' % (config.tmpdir, urllib.quote(text.lower()), voice)
+    os.system('echo "%s" | %s/txt2pho | %s/mbrola -v 2.5 %s/data/%s/%s - %s' % (text, config.txt2phopath, config.txt2phopath, config.txt2phopath, voice, voice, filenamewav))
     os.system('lame %s %s' % (filenamewav, filenamemp3))
     return filenamemp3
 
@@ -315,8 +292,7 @@ def c_out():
 #    return play(sound)
 
 def sounds():
-#    return os.listdir(sampledir)
-    return listFiles(sampledir)
+    return listFiles(config.sampledir)
 
 
 def iscpam():
@@ -324,14 +300,14 @@ def iscpam():
     global suppressuntil
     global lastcpamcheck
     now = int(time.time())
-    if lastcpamcheck + cpamdelta > now:
+    if lastcpamcheck + config.cpamdelta > now:
         coutcount += 1
     else:
         coutcount = 1
     lastcpamcheck = now
-    if coutcount > c_outlimit:
+    if coutcount > config.c_outlimit:
         if suppressuntil == 0:
-            suppressuntil = now + suppressiontimeout
+            suppressuntil = now + config.suppressiontimeout
             return True
         elif now > suppressuntil:
             coutcount = 1
@@ -353,9 +329,7 @@ def playfile(filename):
     if filename.find(".") == -1:
         filename = "%s.mp3" % filename
     if filename.find("/") == -1:
-        #filename = "%s/%s" % (sampledir, filename)
-        filename = findFile(sampledir, filename)
-#    print '%s %s' % (player, filename)
+        filename = findFile(config.sampledir, filename)
     if player == 'mplayer':
         print('mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null' % filename)
         #if enabled == 1: os.system('mplayer -af -softvol -really-quiet %s >/dev/null' % filename)
@@ -368,7 +342,7 @@ def announce(text):
     """Plays a ringing sound, says an announcement and then repeats it."""
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
-    files = ["%s/announce.mp3" % sampledir,
+    files = ["%s/announce.mp3" % config.sampledir,
         acapela('julia', "Achtung! Eine wichtige Durchsage:"),
         acapela('julia', "%s." % text),
         acapela('julia', 'Ich wiederhole:'),
