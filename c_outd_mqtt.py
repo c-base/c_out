@@ -330,7 +330,7 @@ def playfile(filename):
         filename = "%s.mp3" % filename
     if filename.find("/") == -1:
         filename = findFile(config.sampledir, filename)
-    if player == 'mplayer':
+    if config.player == 'mplayer':
         print('mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null' % filename)
         #if enabled == 1: os.system('mplayer -af -softvol -really-quiet %s >/dev/null' % filename)
         if enabled == 1: os.system('killall mplayer; mplayer %s >/dev/null &' % filename)
