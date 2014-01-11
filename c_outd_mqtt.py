@@ -55,6 +55,8 @@ def on_message(obj, msg):
         announce(msg.payload)
     if msg.topic == "c_out/random":
         c_out()
+    if msg.topic == "c_out/loop":
+        play(random.choice(loop_sounds()))
     if msg.topic == "c_out/tts":
         tts("julia", msg.payload)
     if msg.topic == "c_out/julia":
@@ -75,6 +77,7 @@ def start_jsonrpc_server():
     server.register_function(getvolume, 'getvolume')
     server.register_function(voices, 'voices')
     server.register_function(sounds, 'sounds')
+    server.register_function(loop_sounds, 'loop_sounds')
     server.register_function(c_out, 'c_out')
     server.register_function(announce, 'announce')
     server.register_function(enable, 'enable')
@@ -294,6 +297,8 @@ def c_out():
 def sounds():
     return listFiles(config.sampledir)
 
+def loop_sounds():
+    return listFiles("%s/loop" % config.sampledir)
 
 def iscpam():
     global coutcount
