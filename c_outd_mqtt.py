@@ -63,6 +63,24 @@ def on_message(obj, msg):
         tts("julia", msg.payload)
     if msg.topic == "c_out/klaus":
         tts("klaus", msg.payload)
+    if msg.topic == "c_out/lucy":
+        tts("lucy", msg.payload)
+    if msg.topic == "c_out/peter":
+        tts("peter", msg.payload)
+    if msg.topic == "c_out/rachel":
+        tts("rachel", msg.payload)
+    if msg.topic == "c_out/heather":
+        tts("heather", msg.payload)
+    if msg.topic == "c_out/kenny":
+        tts("kenny", msg.payload)
+    if msg.topic == "c_out/laura":
+        tts("laura", msg.payload)
+    if msg.topic == "c_out/nelly":
+        tts("nelly", msg.payload)
+    if msg.topic == "c_out/ryan":
+        tts("ryan", msg.payload)
+    if msg.topic == "c_out/sarah":
+        tts("sarah", msg.payload)
     if msg.topic == "c_out/r2d2":
         r2d2(msg.payload)
     print("%s: %s" % (msg.topic, msg.payload))
