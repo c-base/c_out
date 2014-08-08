@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import httplib, urllib, random, re, os, sys, time, subprocess
@@ -9,7 +9,8 @@ from threading import Thread
 from urllib2 import Request, urlopen
 from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 
-import mosquitto
+#import mosquitto
+import paho.mqtt.client as paho
 
 import config
 
@@ -33,22 +34,27 @@ logger.setLevel(logging.INFO)
 enabled = 1
 
 def mqtt_connect(client):
-    try: 
+    try:
+        client.username_pw_set(config.mqtt_client_name, password=config.mqtt_client_password) 
         client.connect(config.mqtt_server)
         client.subscribe("c_out/+", 1)
         client.on_message = on_message
-    except: pass
+    except Exception as e: 
+        print(e)
+        pass
 
 def mqtt_loop():
-    client = mosquitto.Mosquitto(config.mqtt_client_id)
+    #client = mosquitto.Mosquitto(config.mqtt_client_id)
+    client = paho.Client(config.mqtt_client_id)
     mqtt_connect(client)
     while True:
         result = client.loop(1)
         if result != 0:
             mqtt_connect(client)
+        print("sleep")
         time.sleep(2)
 
-def on_message(obj, msg):
+def on_message(m, obj, msg):
     if msg.topic == "c_out/play":
         play(msg.payload)
     if msg.topic == "c_out/announce":
@@ -358,7 +364,7 @@ def playfile(filename):
         #if enabled == 1: os.system('mplayer -af -softvol -really-quiet %s >/dev/null' % filename)
         if enabled == 1: os.system('killall mplayer; mplayer %s >/dev/null &' % filename)
     else:
-        if enabled == 1: os.system('%s %s &' % (player, filename))
+        if enabled == 1: os.system('killall %s; %s %s &' % (config.player, config.player, filename))
     return "aye"
 
 def announce(text):
