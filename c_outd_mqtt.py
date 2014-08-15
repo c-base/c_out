@@ -37,12 +37,11 @@ enabled = 1
 def mqtt_connect(client):
     try:
         client.username_pw_set(config.mqtt_client_name, password=config.mqtt_client_password) 
-        try:
-            if config.mqtt_server_tls:
-                client.tls_set(config.mqtt_server_cert, cert_reqs=ssl.CERT_NONE)
-        except:
-            pass
-        client.connect(config.mqtt_server)
+        if config.mqtt_server_tls:
+            print client.tls_set(config.mqtt_server_cert, cert_reqs=ssl.CERT_OPTIONAL)
+            print client.connect(config.mqtt_server, port=1884)
+        else:
+            print client.connect(config.mqtt_server, port=1883)
         client.subscribe("c_out/+", 1)
         client.on_message = on_message
     except Exception as e: 
