@@ -13,6 +13,7 @@ from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 import paho.mqtt.client as paho
 
 import config
+import ssl
 
 thevoices = ['lucy', 'peter', 'rachel', 'heather', 'kenny', 'laura', 'nelly', 'ryan', 'julia', 'sarah', 'klaus', 'de5', 'r2d2']
 acapelavoices = ['lucy', 'peter', 'rachel', 'heather', 'kenny', 'laura', 'nelly', 'ryan', 'julia', 'sarah', 'klaus']
@@ -36,6 +37,11 @@ enabled = 1
 def mqtt_connect(client):
     try:
         client.username_pw_set(config.mqtt_client_name, password=config.mqtt_client_password) 
+        try:
+            if config.mqtt_server_tls:
+                client.tls_set(config.mqtt_server_cert, cert_reqs=ssl.CERT_NONE)
+        except:
+            pass
         client.connect(config.mqtt_server)
         client.subscribe("c_out/+", 1)
         client.on_message = on_message
