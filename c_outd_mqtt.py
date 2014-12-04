@@ -43,6 +43,7 @@ def mqtt_connect(client):
         else:
             print client.connect(config.mqtt_server, port=1883)
         client.subscribe("c_out/+", 1)
+        client.subscribe("bar/+", 1)
         client.on_message = on_message
     except Exception as e: 
         print(e)
@@ -94,6 +95,8 @@ def on_message(m, obj, msg):
         tts("Sarah", msg.payload)
     if msg.topic.lower() == "c_out/r2d2":
         r2d2(msg.payload)
+    if msg.topic == "bar/status":
+        play("meep.mp3")
     print("%s: %s" % (msg.topic, msg.payload))
 
 def start_jsonrpc_server():
@@ -365,6 +368,8 @@ def playfile(filename):
         print('mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null' % filename)
         #if enabled == 1: os.system('mplayer -af -softvol -really-quiet %s >/dev/null' % filename)
         if enabled == 1: os.system('killall mplayer; mplayer %s >/dev/null &' % filename)
+    if config.player == 'omxplayer':
+        if enabled == 1: os.system('killall omxplayer; omxplayer %s >/dev/null &' % filename)
     else:
         if enabled == 1: os.system('killall %s; %s %s &' % (config.player, config.player, filename))
     return "aye"
