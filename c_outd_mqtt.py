@@ -12,6 +12,7 @@ from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 #import mosquitto
 import paho.mqtt.client as paho
 
+import sys
 import config
 import ssl
 
@@ -25,7 +26,7 @@ suppressuntil = 0
 lastcpamcheck = 0
 
 logger = logging.getLogger('c_out')
-hdlr = logging.FileHandler(config.logfile)
+hdlr = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr) 
@@ -37,16 +38,15 @@ def mqtt_connect(client):
     try:
         client.username_pw_set(config.mqtt_client_name, password=config.mqtt_client_password) 
         if config.mqtt_server_tls:
-            print client.tls_set(config.mqtt_server_cert, cert_reqs=ssl.CERT_OPTIONAL)
-            print client.connect(config.mqtt_server, port=1884)
+            logger.debug(client.tls_set(config.mqtt_server_cert, cert_reqs=ssl.CERT_OPTIONAL))
+            logger.debug(client.connect(config.mqtt_server, port=1884))
         else:
-            print client.connect(config.mqtt_server, port=1883)
+            logger.debug(client.connect(config.mqtt_server, port=1883))
         client.subscribe("c_out/+", 1)
         client.subscribe("bar/+", 1)
         client.on_message = on_message
-    except Exception as e: 
-        print(e)
-        pass
+    except Exception as e:
+        logger.error(e)
 
 def mqtt_loop():
     #client = mosquitto.Mosquitto(config.mqtt_client_id)
@@ -56,10 +56,12 @@ def mqtt_loop():
         result = client.loop(1)
         if result != 0:
             mqtt_connect(client)
-        print("sleep")
+        #print("sleep")
         time.sleep(2)
 
 def on_message(m, obj, msg):
+    logger.info(u"Got a message via MQTT!")
+    logger.info(u"Message on %s, payload: %s" % (msg.topic, msg.payload))
     if msg.topic == "c_out/play":
         play(msg.payload)
     if msg.topic == "c_out/announce":
@@ -74,7 +76,7 @@ def on_message(m, obj, msg):
         r2d2(msg.payload)
     if msg.topic.lower() == "bar/status":
         play("meep.mp3")
-    print("%s: %s" % (msg.topic, msg.payload))
+    logger.debug("%s: %s" % (msg.topic, msg.payload))
 
 def start_jsonrpc_server():
     server = SimpleJSONRPCServer(('0.0.0.0', 1775))
@@ -157,7 +159,7 @@ def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
         return filename
     else:
 	    reqObj = Request("http://translate.google.com/translate_tts?ie=" + encoding + "&tl=" + lang + "&q=" + text, headers={ 'user-agent':useragent })
-	
+
 	    fileObj = urlopen(reqObj)
 	    localFile = open(filename, "wb")
 	    localFile.write(fileObj.read())
@@ -178,7 +180,7 @@ def att(voice, text):
     conn.request("POST", "/tts/cgi-bin/nph-talk", params, headers)
     response = conn.getresponse()
     if response.status != 301:
-        print("http cgi error, cant get wav url (status=%s)" % response.status)
+        logger.error("http cgi error, cant get wav url (status=%s)" % response.status)
         raise Exception
 
     path = response.getheader('Location')
@@ -277,19 +279,21 @@ def play(filename):
         return playfile(filename)
 
 def playfile(filename):
+    if filename == None:
+        return "playfile got None"
     global enabled
     if filename.find(".") == -1:
         filename = "%s.mp3" % filename
     if filename.find("/") == -1:
         filename = findFile(config.sampledir, filename)
     if config.player == 'mplayer':
-        print('mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null' % filename)
+        logger.debug('/usr/bin/mplayer -af volume=+10 -softvol -really-quiet %s >/dev/null' % filename)
         #if enabled == 1: os.system('mplayer -af -softvol -really-quiet %s >/dev/null' % filename)
-        if enabled == 1: os.system('killall mplayer; mplayer %s >/dev/null &' % filename)
+        if enabled == 1: os.system('/usr/bin/killall mplayer; /usr/bin/mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null &' % filename)
     if config.player == 'omxplayer':
         if enabled == 1: os.system('killall omxplayer; omxplayer %s >/dev/null &' % filename)
     else:
-        if enabled == 1: os.system('killall %s; %s %s &' % (config.player, config.player, filename))
+        if enabled == 1: os.system('killall -9 %s; %s %s &' % (config.player, config.player, filename))
     return "aye"
 
 def announce(text):
