@@ -95,7 +95,7 @@ def on_message(m, obj, msg):
         tts("Sarah", msg.payload)
     if msg.topic.lower() == "c_out/r2d2":
         r2d2(msg.payload)
-    if msg.topic == "bar/status":
+    if msg.topic.lower() == "bar/status":
         play("meep.mp3")
     print("%s: %s" % (msg.topic, msg.payload))
 
@@ -163,7 +163,8 @@ def tts(voice, text):
     if iscpam():
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
     if voice in acapelavoices:
-        return playfile(acapela(voice, text))
+        return
+        #return playfile(acapela(voice, text))
     if voice in googlevoices:
         return playfile(googleTTS(text))
     if voice in txt2phovoices:
@@ -171,64 +172,8 @@ def tts(voice, text):
     elif voice == 'r2d2':
         return playfile(r2d2(text))
     else:
-        return playfile(acapela('Julia', text))
-
-def acapela(voice, text):
-    pitch = 100
-    speed = 180
-    
-    if not text.endswith("."): text = "%s." % (text,)
-
-    text = text.replace('$','Dollar')
-    if (voice in ['Julia', 'Sarah', 'Klaus']):
-        #text = text.replace('c-base','zieh baejs')
-        text = text.replace('c-base','ziebays')
-        text = text.replace('c-beam','ziebiem')
-        text = text.replace('c3pb', 'zeh drei p b')
-
-    if voice.find('22k') == -1:
-        voice = '%s22k' % voice
-    
-    basename = '%s_%s_%d_%d' % (urllib.quote(text.lower()), voice, pitch, speed)
-    filename = '%s/%s.mp3' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
-    #textparam = '\\vct=%d\\ \\spd=%d\\ %s' % (pitch, speed, text)
-
-    # check whether we have a cached version of the the file
-    if os.path.isfile(filename):
-        logger.info('%s - %s' % (text, filename))
-        return filename
-    else:
-        params = urllib.urlencode({
-            'cl_env': 'FLASH_AS_3.0',
-            'MySelectedVoice': 'Julia',
-            'MyTextForTTS': text,
-            'MyLanguages': 'sonid14',
-            'SendToVaaS': '',
-        })
-        
-        headers = {"Content-type": "application/x-www-form-urlencoded",
-                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                   'Referer': "http://www.acapela-group.com/demo-tts/DemoHTML5Form_V2.php",
-                   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0'}
-        conn = httplib.HTTPConnection("www.acapela-group.com")
-        conn.request("POST", "/demo-tts/DemoHTML5Form_V2.php?langdemo=Powered+by+%3Ca+href%3D%22http%3A%2F%2Fwww.acapela-vaas.com%22%3EAcapela+Voice+as+a+Service%3C%2Fa%3E.+For+demo+and+evaluation+purpose+only%2C+for+commercial+use+of+generated+sound+files+please+go+to+%3Ca+href%3D%22http%3A%2F%2Fwww.acapela-box.com%22%3Ewww.acapela-box.com%3C%2Fa%3E", params, headers)
-        #conn.request("POST", "/Services/AcapelaBOX/0/Synthesizer", params, headers)
-        response = conn.getresponse()
-        data = response.read()
-        print data
-        conn.close()
-
-        url = re.compile('http://.*\.mp3').search(data).group()
-
-        mysock = urllib.urlopen(url)
-        fileToSave = mysock.read()
-        oFile = open('%s' % filename,'wb')
-        oFile.write(fileToSave)
-        oFile.close
-        logger.info('%s - %s' % (text, filename))
-        return filename
-
-
+        return
+        #return playfile(acapela('Julia', text))
 
 def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
     basename = '%s_%s' % (urllib.quote(text.lower()), lang)
@@ -378,13 +323,13 @@ def announce(text):
     """Plays a ringing sound, says an announcement and then repeats it."""
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
-    files = ["%s/announce.mp3" % config.sampledir,
-        acapela('Julia', "Achtung! Eine wichtige Durchsage:"),
-        acapela('Julia', "%s." % text),
-        acapela('Julia', 'Ich wiederhole:'),
-        acapela('Julia', "%s." % text),
-        acapela('Julia', 'Vielen Dank!') ]
-    playfile(" ".join(files))
+    #files = ["%s/announce.mp3" % config.sampledir,
+        #tts('Julia', "Achtung! Eine wichtige Durchsage:"),
+        #tts('Julia', "%s." % text),
+        #tts('Julia', 'Ich wiederhole:'),
+        #tts('Julia', "%s." % text),
+        #tts('Julia', 'Vielen Dank!') ]
+    #playfile(" ".join(files))
     return "aye"
 
 def disable():
