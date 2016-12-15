@@ -56,7 +56,6 @@ def mqtt_loop():
         result = client.loop(1)
         if result != 0:
             mqtt_connect(client)
-        #print("sleep")
         time.sleep(2)
 
 def on_message(m, obj, msg):
@@ -70,8 +69,9 @@ def on_message(m, obj, msg):
         c_out()
     if msg.topic == "c_out/loop":
         play(random.choice(loop_sounds()))
-    if msg.topic == "c_out/tts":
-        r2d2(msg.payload)
+    if msg.topic == "c_out/tts" or msg.topic == "c_out/julia":
+	logger.info("Calling pico")
+        playfile(pico2wave(msg.payload))
     if msg.topic.lower() == "c_out/r2d2":
         r2d2(msg.payload)
     if msg.topic.lower() == "bar/status":
@@ -95,6 +95,7 @@ def start_jsonrpc_server():
     server.register_function(disable, 'disable')
     server.serve_forever()
 
+
 def main():
     mqtt = Thread(target=mqtt_loop)
     mqtt.start()
@@ -105,6 +106,7 @@ def main():
 def voices():
     return thevoices
 
+
 def listFiles(dir):
     ls = []
     for item in os.listdir(dir):
@@ -113,6 +115,7 @@ def listFiles(dir):
         else:
             ls.append(item)
     return ls
+
 
 def findFile(dir, filename):
     for item in os.listdir(dir):
@@ -124,6 +127,7 @@ def findFile(dir, filename):
             if res != "":
                return res
     return ""
+
 
 def mergemp3(mp3s, outfile):
     oFile = open('%s/%s.mp3' % (config.tmpdir, outfile),'wb')
@@ -148,7 +152,7 @@ def tts(voice, text):
     elif voice == 'r2d2':
         return playfile(r2d2(text))
     else:
-        return playfile(r2d2(text))
+        return playfile(pico2wave(text))
 
 def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
     basename = '%s_%s' % (urllib.quote(text.lower()), lang)
@@ -166,6 +170,19 @@ def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
 	    localFile.close()
 
     return filename
+
+def pico2wave(text, language="de-DE"):
+    basename = '%s_%s' % (urllib.quote(text.lower()), language)
+    filename = '%s/%s.wav' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
+    #textparam = '\\vct=%d\\ \\spd=%d\\ %s' % (pitch, speed, text)
+    # check whether we have a cached version of the the file
+    if os.path.isfile(filename):
+        logger.info('%s - %s' % (text, filename))
+        return filename
+    else:
+        os.system("/usr/bin/pico2wave --lang=" + language + " --wave=" + filename + " \"" + text + "\"")
+	return filename
+
 
 def att(voice, text):
     return
@@ -288,7 +305,6 @@ def playfile(filename):
         filename = findFile(config.sampledir, filename)
     if config.player == 'mplayer':
         logger.debug('/usr/bin/mplayer -af volume=+10 -softvol -really-quiet %s >/dev/null' % filename)
-        #if enabled == 1: os.system('mplayer -af -softvol -really-quiet %s >/dev/null' % filename)
         if enabled == 1: os.system('/usr/bin/killall mplayer; /usr/bin/mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null &' % filename)
     if config.player == 'omxplayer':
         if enabled == 1: os.system('killall omxplayer; omxplayer %s >/dev/null &' % filename)
@@ -301,11 +317,11 @@ def announce(text):
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
     files = ["%s/announce.mp3" % config.sampledir,
-        tts('', "Achtung! Eine wichtige Durchsage:"),
-        tts('', "%s." % text),
-        tts('', 'Ich wiederhole:'),
-        tts('', "%s." % text),
-        tts('', 'Vielen Dank!') ]
+        pico2wave("Achtung! Eine wichtige Durchsage:"),
+        pico2wave("%s." % text),
+        pico2wave('Ich wiederhole:'),
+        pico2wave("%s." % text),
+        pico2wave('Vielen Dank!') ]
     playfile(" ".join(files))
     return "aye"
 
