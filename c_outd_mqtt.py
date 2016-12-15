@@ -15,8 +15,7 @@ import paho.mqtt.client as paho
 import config
 import ssl
 
-thevoices = ['Lucy', 'Peter', 'Rachel', 'Heather', 'Kenny', 'Laura', 'Nelly', 'Ryan', 'Julia', 'Sarah', 'Klaus', 'de5', 'r2d2']
-acapelavoices = ['Lucy', 'Peter', 'Rachel', 'Heather', 'Kenny', 'Laura', 'Nelly', 'Ryan', 'Julia', 'Sarah', 'Klaus']
+thevoices = ['de5', 'r2d2']
 googlevoices = ['goo']
 attvoices = ["crystal", "mike", "rich", "lauren", "claire", "rosa", "alberto", "klara", "reiner", "alain", "juliette", "arnaud", "charles", "audrey", "anjali"]
 txt2phovoices = ['de5']
@@ -70,29 +69,7 @@ def on_message(m, obj, msg):
     if msg.topic == "c_out/loop":
         play(random.choice(loop_sounds()))
     if msg.topic == "c_out/tts":
-        tts("Julia", msg.payload)
-    if msg.topic.lower() == "c_out/julia":
-        tts("Julia", msg.payload)
-    if msg.topic.lower() == "c_out/klaus":
-        tts("Klaus", msg.payload)
-    if msg.topic.lower() == "c_out/lucy":
-        tts("Lucy", msg.payload)
-    if msg.topic.lower() == "c_out/peter":
-        tts("Peter", msg.payload)
-    if msg.topic.lower() == "c_out/rachel":
-        tts("Rachel", msg.payload)
-    if msg.topic.lower() == "c_out/heather":
-        tts("Heather", msg.payload)
-    if msg.topic.lower() == "c_out/kenny":
-        tts("Kenny", msg.payload)
-    if msg.topic.lower() == "c_out/laura":
-        tts("Laura", msg.payload)
-    if msg.topic.lower() == "c_out/nelly":
-        tts("Nelly", msg.payload)
-    if msg.topic.lower() == "c_out/ryan":
-        tts("Ryan", msg.payload)
-    if msg.topic.lower() == "c_out/sarah":
-        tts("Sarah", msg.payload)
+        r2d2(msg.payload)
     if msg.topic.lower() == "c_out/r2d2":
         r2d2(msg.payload)
     if msg.topic.lower() == "bar/status":
@@ -162,9 +139,6 @@ def mergemp3(mp3s, outfile):
 def tts(voice, text):
     if iscpam():
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
-    if voice in acapelavoices:
-        return
-        #return playfile(acapela(voice, text))
     if voice in googlevoices:
         return playfile(googleTTS(text))
     if voice in txt2phovoices:
@@ -173,7 +147,6 @@ def tts(voice, text):
         return playfile(r2d2(text))
     else:
         return
-        #return playfile(acapela('Julia', text))
 
 def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
     basename = '%s_%s' % (urllib.quote(text.lower()), lang)
@@ -323,13 +296,13 @@ def announce(text):
     """Plays a ringing sound, says an announcement and then repeats it."""
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
-    #files = ["%s/announce.mp3" % config.sampledir,
-        #tts('Julia', "Achtung! Eine wichtige Durchsage:"),
-        #tts('Julia', "%s." % text),
-        #tts('Julia', 'Ich wiederhole:'),
-        #tts('Julia', "%s." % text),
-        #tts('Julia', 'Vielen Dank!') ]
-    #playfile(" ".join(files))
+    files = ["%s/announce.mp3" % config.sampledir,
+        tts('', "Achtung! Eine wichtige Durchsage:"),
+        tts('', "%s." % text),
+        tts('', 'Ich wiederhole:'),
+        tts('', "%s." % text),
+        tts('', 'Vielen Dank!') ]
+    playfile(" ".join(files))
     return "aye"
 
 def disable():
