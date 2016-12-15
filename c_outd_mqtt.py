@@ -146,7 +146,7 @@ def tts(voice, text):
     elif voice == 'r2d2':
         return playfile(r2d2(text))
     else:
-        return
+        return playfile(r2d2(text))
 
 def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
     basename = '%s_%s' % (urllib.quote(text.lower()), lang)
