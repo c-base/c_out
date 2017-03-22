@@ -65,6 +65,8 @@ def on_message(m, obj, msg):
         play(msg.payload)
     if msg.topic == "c_out/announce":
         announce(msg.payload)
+    if msg.topic == "c_out/announce_en":
+        announce_en(msg.payload)
     if msg.topic == "c_out/random":
         c_out()
     if msg.topic == "c_out/loop":
@@ -324,6 +326,18 @@ def announce(text):
         pico2wave('Vielen Dank!') ]
     playfile(" ".join(files))
     return "aye"
+
+def announce_en(text):
+    """Plays a ringing sound, says an announcement and then repeats it. In English!"""
+    if iscpam(): 
+        return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
+    files = [
+	"%s/announce.mp3" % config.sampledir,
+        pico2wave("%s." % text, 'en-US')
+    ]
+    playfile(" ".join(files))
+    return "aye"
+
 
 def disable():
     global enabled
