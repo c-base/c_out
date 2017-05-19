@@ -4,6 +4,7 @@
 import httplib, urllib, random, re, os, sys, time, subprocess
 import logging
 import hashlib
+import json
 from threading import Thread
 
 from urllib2 import Request, urlopen
@@ -58,15 +59,22 @@ def mqtt_loop():
             mqtt_connect(client)
         time.sleep(2)
 
+def extract_payload(msg):
+    try:
+        payload = json.loads(msg.payload)
+    except:
+        payload = msg.payload
+    return payload
+
 def on_message(m, obj, msg):
     logger.info(u"Got a message via MQTT!")
     logger.info(u"Message on %s, payload: %s" % (msg.topic, msg.payload))
     if msg.topic == "c_out/play":
         play(msg.payload)
     if msg.topic == "c_out/announce":
-        announce(msg.payload)
+        announce(extract_payload(msg))
     if msg.topic == "c_out/announce_en":
-        announce_en(msg.payload)
+        announce_en(extract_payload(msg))
     if msg.topic == "c_out/random":
         c_out()
     if msg.topic == "c_out/loop":
@@ -319,12 +327,12 @@ def announce(text):
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
     files = ["%s/announce.mp3" % config.sampledir,
-        pico2wave("Achtung! Eine wichtige Durchsage:"),
-        pico2wave("%s." % text),
-        pico2wave('Ich wiederhole:'),
-        pico2wave("%s." % text),
-        pico2wave('Vielen Dank!') ]
-    playfile(" ".join(files))
+        pico2wave(u"Achtung! Eine wichtige Durchsage:"),
+        pico2wave(u"%s." % urllib.unquote(text)),
+        pico2wave(u'Ich wiederhole:'),
+        pico2wave(u"%s." % urllib.unquote(text)),
+        pico2wave(u'Vielen Dank!') ]
+    playfile(u" ".join(files))
     return "aye"
 
 def announce_en(text):
@@ -332,7 +340,7 @@ def announce_en(text):
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
     files = [
-	"%s/announce.mp3" % config.sampledir,
+	"%s/announce_fritz.mp3" % config.sampledir,
         pico2wave("%s." % text, 'en-US')
     ]
     playfile(" ".join(files))
