@@ -68,7 +68,7 @@ def extract_payload(msg):
 
 def on_message(m, obj, msg):
     logger.info(u"Got a message via MQTT!")
-    logger.info(u"Message on %s, payload: %s" % (msg.topic, msg.payload))
+    logger.info(u"Message on %s, payload: %s" % (msg.topic.decode('utf-8'), msg.payload.decode('utf-8')))
     if msg.topic == "c_out/play":
         play(msg.payload)
     if msg.topic == "c_out/announce":
@@ -182,7 +182,8 @@ def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
     return filename
 
 def pico2wave(text, language="de-DE"):
-    basename = '%s_%s' % (urllib.quote(text.lower()), language)
+    replaced = ''.join([i if ord(i) < 128 else '_' for i in text])
+    basename = '%s_%s' % (urllib.quote(replaced.lower()), language)
     filename = '%s/%s.wav' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
     #textparam = '\\vct=%d\\ \\spd=%d\\ %s' % (pitch, speed, text)
     # check whether we have a cached version of the the file
@@ -190,7 +191,8 @@ def pico2wave(text, language="de-DE"):
         logger.info('%s - %s' % (text, filename))
         return filename
     else:
-        os.system("/usr/bin/pico2wave --lang=" + language + " --wave=" + filename + " \"" + text + "\"")
+	cmd = u"/usr/bin/pico2wave --lang=%s --wave=%s \"%s\"" %(language, filename, text)
+        os.system(cmd.encode('utf-8'))
 	return filename
 
 
@@ -326,12 +328,25 @@ def announce(text):
     """Plays a ringing sound, says an announcement and then repeats it."""
     if iscpam(): 
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
-    files = ["%s/announce.mp3" % config.sampledir,
-        pico2wave(u"Achtung! Eine wichtige Durchsage:"),
-        pico2wave(u"%s." % urllib.unquote(text)),
-        pico2wave(u'Ich wiederhole:'),
-        pico2wave(u"%s." % urllib.unquote(text)),
-        pico2wave(u'Vielen Dank!') ]
+    try:
+        
+    	files = [
+		"%s/announce.mp3" % config.sampledir,
+        	pico2wave(u"Achtung! Eine wichtige Durchsage:"),
+        	pico2wave(u"%s." % urllib.unquote(text.decode('utf-8'))),
+        	pico2wave(u'Ich wiederhole:'),
+        	pico2wave(u"%s." % urllib.unquote(text.decode('utf-8'))),
+        	pico2wave(u'Vielen Dank!') 
+	]
+    except KeyError, e:
+        files = [
+                "%s/announce.mp3" % config.sampledir,
+                pico2wave(u"Achtung! Eine wichtige Durchsage:"),
+                pico2wave(u"%s." % text.decode('utf-8')),
+                pico2wave(u'Ich wiederhole:'),
+                pico2wave(u"%s." % text.decode('utf-8')),
+                pico2wave(u'Vielen Dank!')
+        ]
     playfile(u" ".join(files))
     return "aye"
 
