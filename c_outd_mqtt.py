@@ -12,7 +12,7 @@ import ssl
 import subprocess
 import sys
 import time
-from threading import Thread
+from threading import Lock, Thread
 from urllib.parse import quote, unquote, urlencode
 from urllib.request import Request, urlopen
 
@@ -303,20 +303,59 @@ def play(filename):
     else:
         return playfile(filename)
 
-def playfile(filename):
-    if filename is None:
-        return "playfile got None"
+_play_lock = Lock()
+_play_gen = 0
+_play_proc = None
+
+def player_cmd(filename):
+    if config.player == 'mplayer':
+        return ['/usr/bin/mplayer', '-af', 'volume=+5', '-softvol', '-really-quiet', filename]
+    if config.player == 'omxplayer':
+        return ['omxplayer', filename]
+    return [config.player, filename]
+
+def stop_playback():
+    """Stops the running player and invalidates any queued files.
+    Returns the new playback generation."""
+    global _play_gen, _play_proc
+    with _play_lock:
+        _play_gen += 1
+        if _play_proc is not None and _play_proc.poll() is None:
+            _play_proc.kill()
+        return _play_gen
+
+def play_sequence(files, gen):
+    """Plays files one after another, each in its own player process, so
+    the player drains the audio buffer before the next file starts."""
+    global _play_proc
+    for f in files:
+        with _play_lock:
+            if gen != _play_gen:
+                return
+            logger.debug(" ".join(player_cmd(f)))
+            try:
+                proc = subprocess.Popen(player_cmd(f), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError as e:
+                logger.error("cannot start player: %s" % e)
+                return
+            _play_proc = proc
+        proc.wait()
+
+def resolve_sound(filename):
     if filename.find(".") == -1:
         filename = "%s.mp3" % filename
     if filename.find("/") == -1:
         filename = findFile(config.sampledir, filename)
-    if config.player == 'mplayer':
-        logger.debug('/usr/bin/mplayer -af volume=+10 -softvol -really-quiet %s >/dev/null' % filename)
-        if enabled == 1: os.system('/usr/bin/killall mplayer; /usr/bin/mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null &' % filename)
-    elif config.player == 'omxplayer':
-        if enabled == 1: os.system('killall omxplayer; omxplayer %s >/dev/null &' % filename)
-    else:
-        if enabled == 1: os.system('killall -9 %s; %s %s &' % (config.player, config.player, filename))
+    return filename
+
+def playfile(filename):
+    """Plays one file or several space-separated files in sequence."""
+    if filename is None:
+        return "playfile got None"
+    files = [resolve_sound(f) for f in filename.split()]
+    if enabled == 1 and files:
+        gen = stop_playback()
+        Thread(target=play_sequence, args=(files, gen), daemon=True).start()
     return "aye"
 
 def announce(text):
