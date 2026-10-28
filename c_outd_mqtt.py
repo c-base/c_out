@@ -1,21 +1,25 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import httplib, urllib, random, re, os, sys, time, subprocess
-import logging
 import hashlib
+import http.client
 import json
+import logging
+import os
+import random
+import re
+import ssl
+import subprocess
+import sys
+import time
 from threading import Thread
+from urllib.parse import quote, unquote, urlencode
+from urllib.request import Request, urlopen
 
-from urllib2 import Request, urlopen
+import paho.mqtt.client as paho
 from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 
-#import mosquitto
-import paho.mqtt.client as paho
-
-import sys
 import config
-import ssl
 
 thevoices = ['de5', 'r2d2']
 googlevoices = ['goo']
@@ -30,14 +34,14 @@ logger = logging.getLogger('c_out')
 hdlr = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
-logger.addHandler(hdlr) 
+logger.addHandler(hdlr)
 logger.setLevel(logging.INFO)
 
 enabled = 1
 
 def mqtt_connect(client):
     try:
-        client.username_pw_set(config.mqtt_client_name, password=config.mqtt_client_password) 
+        client.username_pw_set(config.mqtt_client_name, password=config.mqtt_client_password)
         if config.mqtt_server_tls:
             logger.debug(client.tls_set(config.mqtt_server_cert, cert_reqs=ssl.CERT_OPTIONAL))
             logger.debug(client.connect(config.mqtt_server, port=1884))
@@ -50,8 +54,7 @@ def mqtt_connect(client):
         logger.error(e)
 
 def mqtt_loop():
-    #client = mosquitto.Mosquitto(config.mqtt_client_id)
-    client = paho.Client(config.mqtt_client_id)
+    client = paho.Client(paho.CallbackAPIVersion.VERSION2, config.mqtt_client_id)
     mqtt_connect(client)
     while True:
         result = client.loop(1)
@@ -59,34 +62,35 @@ def mqtt_loop():
             mqtt_connect(client)
         time.sleep(2)
 
-def extract_payload(msg):
+def extract_payload(payload):
     try:
-        payload = json.loads(msg.payload)
-    except:
-        payload = msg.payload
-    return payload
+        return json.loads(payload)
+    except ValueError:
+        return payload
 
-def on_message(m, obj, msg):
-    logger.info(u"Got a message via MQTT!")
-    logger.info(u"Message on %s, payload: %s" % (msg.topic.decode('utf-8'), msg.payload.decode('utf-8')))
-    if msg.topic == "c_out/play":
-        play(msg.payload)
-    if msg.topic == "c_out/announce":
-        announce(extract_payload(msg))
-    if msg.topic == "c_out/announce_en":
-        announce_en(extract_payload(msg))
-    if msg.topic == "c_out/random":
+def on_message(client, userdata, msg):
+    topic = msg.topic
+    payload = msg.payload.decode('utf-8', errors='replace')
+    logger.info("Got a message via MQTT!")
+    logger.info("Message on %s, payload: %s" % (topic, payload))
+    if topic == "c_out/play":
+        play(payload)
+    if topic == "c_out/announce":
+        announce(extract_payload(payload))
+    if topic == "c_out/announce_en":
+        announce_en(extract_payload(payload))
+    if topic == "c_out/random":
         c_out()
-    if msg.topic == "c_out/loop":
+    if topic == "c_out/loop":
         play(random.choice(loop_sounds()))
-    if msg.topic == "c_out/tts" or msg.topic == "c_out/julia":
-	logger.info("Calling pico")
-        playfile(pico2wave(msg.payload))
-    if msg.topic.lower() == "c_out/r2d2":
-        r2d2(msg.payload)
-    if msg.topic.lower() == "bar/status":
+    if topic == "c_out/tts" or topic == "c_out/julia":
+        logger.info("Calling pico")
+        playfile(pico2wave(payload))
+    if topic.lower() == "c_out/r2d2":
+        r2d2(payload)
+    if topic.lower() == "bar/status":
         play("meep.mp3")
-    logger.debug("%s: %s" % (msg.topic, msg.payload))
+    logger.debug("%s: %s" % (topic, payload))
 
 def start_jsonrpc_server():
     server = SimpleJSONRPCServer(('0.0.0.0', 1775))
@@ -107,10 +111,12 @@ def start_jsonrpc_server():
 
 
 def main():
-    mqtt = Thread(target=mqtt_loop)
+    mqtt = Thread(target=mqtt_loop, daemon=True)
     mqtt.start()
     if config.jsonrpc_enabled:
         start_jsonrpc_server()
+    else:
+        mqtt.join()
 
 
 def voices():
@@ -135,21 +141,21 @@ def findFile(dir, filename):
         elif os.path.isdir("%s/%s" % (dir, item)):
             res = findFile("%s/%s" % (dir, item), filename)
             if res != "":
-               return res
+                return res
     return ""
 
 
 def mergemp3(mp3s, outfile):
-    oFile = open('%s/%s.mp3' % (config.tmpdir, outfile),'wb')
-    oFile.close
-
-    for mp3 in mp3s:
-        iFile = open("%s/%s" % (config.r2d2path, mp3), 'r')
-        oFile.write(iFile.read())
-        iFile.close
-    oFile.close
+    with open('%s/%s.mp3' % (config.tmpdir, outfile), 'wb') as oFile:
+        for mp3 in mp3s:
+            with open("%s/%s" % (config.r2d2path, mp3), 'rb') as iFile:
+                oFile.write(iFile.read())
 
     return "%s/%s" % (config.tmpdir, outfile)
+
+
+def cachefilename(text, suffix):
+    return '%s/%s' % (config.tmpdir, hashlib.sha256(text.encode('utf-8')).hexdigest() + suffix)
 
 
 def tts(voice, text):
@@ -165,47 +171,41 @@ def tts(voice, text):
         return playfile(pico2wave(text))
 
 def googleTTS(text, lang="de", encoding="UTF-8", useragent="firefox"):
-    basename = '%s_%s' % (urllib.quote(text.lower()), lang)
-    filename = '%s/%s.mp3' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
+    basename = '%s_%s' % (quote(text.lower()), lang)
+    filename = cachefilename(basename, '.mp3')
 
     logger.info('%s - %s' % (text, filename))
     if os.path.isfile(filename):
         return filename
-    else:
-	    reqObj = Request("http://translate.google.com/translate_tts?ie=" + encoding + "&tl=" + lang + "&q=" + text, headers={ 'user-agent':useragent })
 
-	    fileObj = urlopen(reqObj)
-	    localFile = open(filename, "wb")
-	    localFile.write(fileObj.read())
-	    localFile.close()
+    reqObj = Request("http://translate.google.com/translate_tts?ie=" + encoding + "&tl=" + lang + "&q=" + quote(text), headers={'user-agent': useragent})
+    with urlopen(reqObj) as fileObj, open(filename, "wb") as localFile:
+        localFile.write(fileObj.read())
 
     return filename
 
 def pico2wave(text, language="de-DE"):
     replaced = ''.join([i if ord(i) < 128 else '_' for i in text])
-    basename = '%s_%s' % (urllib.quote(replaced.lower()), language)
-    filename = '%s/%s.wav' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
-    #textparam = '\\vct=%d\\ \\spd=%d\\ %s' % (pitch, speed, text)
+    basename = '%s_%s' % (quote(replaced.lower()), language)
+    filename = cachefilename(basename, '.wav')
     # check whether we have a cached version of the the file
     if os.path.isfile(filename):
         logger.info('%s - %s' % (text, filename))
         return filename
-    else:
-	cmd = u"/usr/bin/pico2wave --lang=%s --wave=%s \"%s\"" %(language, filename, text)
-        os.system(cmd.encode('utf-8'))
-	return filename
+    subprocess.run(["/usr/bin/pico2wave", "--lang=%s" % language, "--wave=%s" % filename, text])
+    return filename
 
 
 def att(voice, text):
     return
     HOST = "192.20.225.55"
-    basename = '%s_%s' % (urllib.quote(text.lower()), lang)
-    filename = '%s/%s.mp3' % (config.tmpdir, hashlib.sha256(basename).hexdigest())
-    params = urllib.urlencode({'voice': voice, 'txt':text, 'speakButton': 'SPEAK'})
+    basename = '%s_%s' % (quote(text.lower()), voice)
+    filename = cachefilename(basename, '.mp3')
+    params = urlencode({'voice': voice, 'txt': text, 'speakButton': 'SPEAK'})
     headers = {"Content-type": "application/x-www-form-urlencoded",
             "User-Agent": "firefox",
             "Accept": "text/plain"}
-    conn = httplib.HTTPConnection(HOST)
+    conn = http.client.HTTPConnection(HOST)
     conn.request("POST", "/tts/cgi-bin/nph-talk", params, headers)
     response = conn.getresponse()
     if response.status != 301:
@@ -215,51 +215,50 @@ def att(voice, text):
     path = response.getheader('Location')
     conn.close()
 
-    mysock = urllib.urlopen("http://%s/%s" % (HOST, path))
-    fileToSave = mysock.read()
-    oFile = open('%s' % filename,'wb')
-    oFile.write(fileToSave)
-    oFile.close
+    with urlopen("http://%s/%s" % (HOST, path)) as mysock, open(filename, 'wb') as oFile:
+        oFile.write(mysock.read())
     logger.info('%s - %s' % (text, filename))
     return filename
+
+R2D2_CHARS = {
+    " ": "space",
+    "\n": "space",
+    "/": "slash",
+    "-": "minus",
+    "?": "ask",
+    "ä": "ae",
+    "ß": "szett",
+    "ö": "oe",
+    "ü": "ue",
+    "Ä": "AE",
+    "Ö": "OE",
+    "Ü": "UE",
+}
 
 def r2d2(text):
     mp3s = []
 
     for char in text:
-        char = char.replace(" ", "space")
-        char = char.replace("\n", "space")
-        char = char.replace("/", "slash")
-        char = char.replace("-", "minus")
-        char = char.replace("?", "ask")
-        char = char.replace(unicode('\xc3\xa4', 'utf8'), "ae")
-        char = char.replace(unicode('\xc3\x9e', 'utf8'), "szett")
-        char = char.replace(unicode('\xc3\xb6', 'utf8'), "oe")
-        char = char.replace(unicode('\xc3\xbc', 'utf8'), "ue")
-        char = char.replace(unicode('\xc3\x84', 'utf8'), "AE")
-        char = char.replace(unicode('\xc3\x96', 'utf8'), "OE")
-        char = char.replace(unicode('\xc3\x9c', 'utf8'), "UE")
-
+        char = R2D2_CHARS.get(char, char)
         mp3s.append("%s/%s.mp3" % (config.r2d2path, char))
     logger.info("%s - %s" % (text, "r2d2"))
     return " ".join(mp3s)
 
 def txt2pho(voice, text):
-    filenamemp3 = '%s/%s_%s.mp3' % (config.tmpdir, urllib.quote(text.lower()), voice)
-    filenamewav = '%s/%s_%s.wav' % (config.tmpdir, urllib.quote(text.lower()), voice)
+    filenamemp3 = '%s/%s_%s.mp3' % (config.tmpdir, quote(text.lower()), voice)
+    filenamewav = '%s/%s_%s.wav' % (config.tmpdir, quote(text.lower()), voice)
     os.system('echo "%s" | %s/txt2pho | %s/mbrola -v 2.5 %s/data/%s/%s - %s' % (text, config.txt2phopath, config.txt2phopath, config.txt2phopath, voice, voice, filenamewav))
     os.system('lame %s %s' % (filenamewav, filenamemp3))
     return filenamemp3
 
 def getvolume():
-    res = subprocess.Popen(['amixer', 'get', 'Master'],  stdout=subprocess.PIPE).stdout.read()
-    m = re.search('\[(\d+)\%\]', res)
     try:
+        res = subprocess.run(['amixer', 'get', 'Master'], capture_output=True, text=True).stdout
+        m = re.search(r'\[(\d+)%\]', res)
         curvol = m.group(1)
-    except:
+    except Exception:
         curvol = -1
 
-    #curvol = subprocess.Popen('/usr/local/bin/getvol', stdout=subprocess.PIPE).stdout.read()
     return curvol
 
 def setvolume(vol):
@@ -268,9 +267,6 @@ def setvolume(vol):
 
 def c_out():
     return play(random.choice(sounds()))
-
-#def c_out(sound):
-#    return play(sound)
 
 def sounds():
     return listFiles(config.sampledir)
@@ -308,9 +304,8 @@ def play(filename):
         return playfile(filename)
 
 def playfile(filename):
-    if filename == None:
+    if filename is None:
         return "playfile got None"
-    global enabled
     if filename.find(".") == -1:
         filename = "%s.mp3" % filename
     if filename.find("/") == -1:
@@ -318,7 +313,7 @@ def playfile(filename):
     if config.player == 'mplayer':
         logger.debug('/usr/bin/mplayer -af volume=+10 -softvol -really-quiet %s >/dev/null' % filename)
         if enabled == 1: os.system('/usr/bin/killall mplayer; /usr/bin/mplayer -af volume=+5 -softvol -really-quiet %s >/dev/null &' % filename)
-    if config.player == 'omxplayer':
+    elif config.player == 'omxplayer':
         if enabled == 1: os.system('killall omxplayer; omxplayer %s >/dev/null &' % filename)
     else:
         if enabled == 1: os.system('killall -9 %s; %s %s &' % (config.player, config.player, filename))
@@ -326,36 +321,26 @@ def playfile(filename):
 
 def announce(text):
     """Plays a ringing sound, says an announcement and then repeats it."""
-    if iscpam(): 
+    if iscpam():
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
-    try:
-        
-    	files = [
-		"%s/announce.mp3" % config.sampledir,
-        	pico2wave(u"Achtung! Eine wichtige Durchsage:"),
-        	pico2wave(u"%s." % urllib.unquote(text.decode('utf-8'))),
-        	pico2wave(u'Ich wiederhole:'),
-        	pico2wave(u"%s." % urllib.unquote(text.decode('utf-8'))),
-        	pico2wave(u'Vielen Dank!') 
-	]
-    except KeyError, e:
-        files = [
-                "%s/announce.mp3" % config.sampledir,
-                pico2wave(u"Achtung! Eine wichtige Durchsage:"),
-                pico2wave(u"%s." % text.decode('utf-8')),
-                pico2wave(u'Ich wiederhole:'),
-                pico2wave(u"%s." % text.decode('utf-8')),
-                pico2wave(u'Vielen Dank!')
-        ]
-    playfile(u" ".join(files))
+    text = unquote(str(text))
+    files = [
+        "%s/announce.mp3" % config.sampledir,
+        pico2wave("Achtung! Eine wichtige Durchsage:"),
+        pico2wave("%s." % text),
+        pico2wave('Ich wiederhole:'),
+        pico2wave("%s." % text),
+        pico2wave('Vielen Dank!')
+    ]
+    playfile(" ".join(files))
     return "aye"
 
 def announce_en(text):
     """Plays a ringing sound, says an announcement and then repeats it. In English!"""
-    if iscpam(): 
+    if iscpam():
         return "cpam alarm. bitte beachten sie die sicherheitshinweise. (%d)" % (suppressuntil - int(time.time()))
     files = [
-	"%s/announce_fritz.mp3" % config.sampledir,
+        "%s/announce_fritz.mp3" % config.sampledir,
         pico2wave("%s." % text, 'en-US')
     ]
     playfile(" ".join(files))
@@ -374,4 +359,3 @@ def enable():
 
 if __name__ == "__main__":
     main()
-

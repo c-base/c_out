@@ -1,4 +1,2 @@
-argparse==1.2.1
-jsonrpclib==0.1.7
-paho-mqtt==1.1
-wsgiref==0.1.2
+jsonrpclib==0.2.1
+paho-mqtt==2.1.0
