@@ -1,0 +1,17 @@
+[Unit]
+Description=c_out sound daemon (MQTT + JSON-RPC)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cout
+Group=audio
+WorkingDirectory=/home/cout/c_out
+ExecStart=/home/cout/c_out/runenv.sh c_outd_mqtt.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
